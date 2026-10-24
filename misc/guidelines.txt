@@ -1,0 +1,74 @@
+Guideline for Video processing in Midterm and Final exams 
+
+# importing libraries
+import cv2
+import numpy as np
+
+# Create a VideoCapture object and read from input file
+cap = cv2.VideoCapture('video1.mp4')
+
+# Check if camera opened successfully
+if (cap.isOpened()== False):
+   print("Error opening video file")
+
+frame_width = int(cap.get(3)) 
+frame_height = int(cap.get(4)) 
+   
+size = (frame_width, frame_height) 
+result = cv2.VideoWriter('video1_output_sample.mp4',  cv2.VideoWriter_fourcc(*'mp4v'), 
+                         30, size)	#mp4v	avc1
+print("Resolution =", size)
+
+# Read until video is completed
+while(cap.isOpened()):
+
+    # Capture frame-by-frame
+    ret, frame = cap.read()
+    if ret == False: break
+    
+    #cv2.imshow('Frame', frame)
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV) 
+      
+    # Threshold of red/blue in HSV space 
+    lower_red = np.array([159, 50, 70])
+    upper_red = np.array([180, 255, 255])
+    lower_blue = np.array([105, 150, 70])
+    upper_blue = np.array([135, 255, 255])
+  
+    # preparing the mask to overlay 
+    mask = cv2.inRange(hsv, lower_red, upper_red)
+    
+    #Find contours
+    contours, hierarchy = cv2.findContours(image=mask, …
+…
+
+Some strategies for detecting Traffic signs:
+Color filtering:
+HSV-based color filtering (main colors in a traffic sign: RED, BLUE, YELLOW, WHITE, ...) 
+Then find contours ( findContours() function )
+Check whether each contour belongs to a traffic sign or not :
+Shape of the contour: circle or rectangle or triangle
+"opencv check a contour is circle"
+                            		Circularity: 
+
+
+                            		or use cv2.HoughCircles : https://www.geeksforgeeks.org/python/circle-detection-using-opencv-python/
+"opencv check a contour is triangle/rectangle"  cv2.approxPolyDP()  Lab04: "Contour features" section
+
+Area / perimeter of the contour
+Width & height of the bounding box
+
+                      ...
+            Try to remove redundant contours (not related to Traffic signs)
+
+Feature matching
+Template matching
+
+
+Final Report - Infer the Traffic sign content:
+      + Inside the contour, calculate the rate or number RED / BLUE / YELLOW / WHITE pixels
+      + Shape of the contour: circle or rectangle or triangle
+      + Feature matching:    https://www.geeksforgeeks.org/feature-matching-using-brute-force-in-opencv/ 
+      + Template matching
+
+—
