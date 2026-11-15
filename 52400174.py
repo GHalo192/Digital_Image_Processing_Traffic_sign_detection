@@ -1,10 +1,12 @@
 import numpy as np
-import cv2 
+import cv2
 
+# video links
 vid1 = "video1"
 vid2 = "video2"
 vid3 = "video1_output_sample"
 
+# kernels
 kernel3 = np.ones((3, 3), np.uint8)
 kernel5 = np.ones((5, 5), np.uint8)
 kernel7 = np.ones((7, 7), np.uint8)
@@ -26,6 +28,7 @@ kernelblueconnect = np.array([
     [1,0,0,0,0,0,0],
 ], dtype=np.uint8)
 
+# functions
 def readFromFile(filename):
     capSRC = f"{filename}.mp4"
     return capSRC
@@ -394,7 +397,8 @@ def watchVideo(filename):
         elif key == ord('q') or key == 27:
             break
         
-        
+# interface
+
 while True:
     print("===============MENU===============")
     print("1. Process video 1")
