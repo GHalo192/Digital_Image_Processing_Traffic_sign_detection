@@ -7,7 +7,7 @@ vid2 = "video2"
 
 
 def readFromFile(filename):
-    capSRC = f"Digital_Image_Processing/videos/{filename}.mp4" # will need to be adjusted for each folder/ device
+    capSRC = f"videos/{filename}.mp4" # will need to be adjusted for each folder/ device
     return capSRC # note: where python read a file will start from the folder which you open it
 
 def watchVideo(filename):
@@ -60,7 +60,7 @@ def watchVideo(filename):
             frame_number = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
             outfilename = f"52400174_Output-{filename}-Frame-{frame_number}.jpg"
 
-            success = cv2.imwrite("Digital_Image_Processing/images/" + outfilename, frame)
+            success = cv2.imwrite("images/" + outfilename, frame)
 
             if success:
                 print(f"Saved: {outfilename}")
