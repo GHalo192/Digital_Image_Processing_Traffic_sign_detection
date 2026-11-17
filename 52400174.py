@@ -2,9 +2,9 @@ import numpy as np
 import cv2
 
 # video links
-vid1 = "video1"
-vid2 = "video2"
-vid3 = "video1_output_sample"
+vid1 = "videos/video1"
+vid2 = "videos/video2"
+vid3 = "videos/video1_output_sample"
 
 # kernels
 kernel3 = np.ones((3, 3), np.uint8)

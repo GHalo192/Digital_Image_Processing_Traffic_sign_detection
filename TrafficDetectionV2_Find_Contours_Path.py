@@ -6,10 +6,25 @@ vid1 = "video1"
 vid2 = "video2"
 vid3 = "video1_output_sample"
 
+# kernels
+kernels3 = np.ones((3, 3), np.uint8)
+kernels5 = np.ones((5, 5), np.uint8)
+kernels7 = np.ones((7, 7), np.uint8)
+kernels9 = np.ones((9, 9), np.uint8)
+
+kernele3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+kernele5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+kernele7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+kernele9 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+
+
+
+
 def readFromFile(filename):
     capSRC = f"videos/{filename}.mp4"
     return capSRC
 
+# tạo blindfold che màn hình
 def createEvilROI(height, width):    
     # Khởi tạo một mảng toàn số 255 (màu trắng) có cùng kích thước với ảnh
     trapezoidMask = np.ones((height, width), dtype=np.uint8) * 255
@@ -24,8 +39,8 @@ def createEvilROI(height, width):
     
     pts = np.array([
         [int(width * 0.01), height],          # Điểm 1: Góc dưới bên trái (gần mép trái)
-        [int(width * 0.35), int(height * 0.52)], # Điểm 2: Góc trên bên trái (ngay dưới đường chân trời)
-        [int(width * 0.65), int(height * 0.52)], # Điểm 3: Góc trên bên phải (ngay dưới đường chân trời)
+        [int(width * 0.30), int(height * 0.52)], # Điểm 2: Góc trên bên trái (ngay dưới đường chân trời)
+        [int(width * 0.70), int(height * 0.52)], # Điểm 3: Góc trên bên phải (ngay dưới đường chân trời)
         [int(width * 0.99), height]           # Điểm 4: Góc dưới bên phải (gần mép phải)
     ], dtype=np.int32)
     
@@ -35,6 +50,193 @@ def createEvilROI(height, width):
     mask = cv2.bitwise_and(trapezoidMask, rectangleMask)
     
     return mask
+
+def getColorMask(hsv_image, lower, upper):
+    mask = cv2.inRange(
+        hsv_image,
+        lower,
+        upper
+    )
+    return mask
+
+def removeStrays(mask, kernel):
+    new_mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_OPEN,
+        kernel
+    )
+    return new_mask
+
+def mendCracks(mask, kernel):
+    new_mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        kernel
+    )
+    return new_mask
+
+# loại bỏ nhiễu hạt lẻ
+def medianFilterMulti(*masks,s=3, iterations=1): 
+    processed_masks = []
+    
+    for m in masks:
+        for _ in range(iterations):
+            m = cv2.medianBlur(m, ksize=s)
+        processed_masks.append(m)
+        
+    return processed_masks
+
+def fill_and_heal_mask(binary_mask, min_area = 300, max_area = 40000, min_solidity = 0.7):
+    # 1. Chỉ lấy các đường viền ngoài cùng (bỏ qua lỗ rỗng bên trong)
+    contours, _ = cv2.findContours(
+        binary_mask, 
+        cv2.RETR_EXTERNAL, 
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+    
+    # Tạo một tấm ảnh đen sạch để vẽ kết quả
+    healed_mask = np.zeros_like(binary_mask)
+    
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        # Bỏ qua các đốm nhiễu quá nhỏ
+        if area < min_area:
+            continue
+            
+        # 2. Tạo bao lồi (kéo căng dây thun quanh contour để vá vết lõm chữ C)
+        hull = cv2.convexHull(cnt)
+        hull_area = cv2.contourArea(hull)
+        
+        if hull_area == 0:
+            continue
+            
+        # 3. Kiểm tra độ đặc (Solidity) để tránh vá nhầm nhiễu nền trời/cây cối
+        solidity = area / hull_area
+        if solidity >= min_solidity:
+            # Tô đặc ruột (FILLED) theo đường bao lồi đã vá
+            cv2.drawContours(healed_mask, [hull], -1, 255, thickness=cv2.FILLED)
+            
+    return healed_mask        
+
+
+def filter_cir_draw(contours, image, min_circularity = 0.75,limit=1750): # độ tròn nên là 0.7 hoặc hơn
+    for contour in contours:
+        # Mặc kệ những contour nhỏ hơn 2000 pixels
+        area = cv2.contourArea(contour)
+
+        if area < limit:
+            continue
+
+        # Tính độ tròn của contour
+        perimeter = cv2.arcLength(contour, True)
+
+        if perimeter == 0:
+            continue
+
+        circularity = (4 * np.pi * area) / (perimeter ** 2)
+
+        if circularity < min_circularity:
+            continue
+
+        # Vẽ bounding box
+        x, y, w, h = cv2.boundingRect(contour)
+
+        if w < 15 or h < 15:
+            continue
+
+        # Filter by aspect ratio
+        ratio = w / h
+
+        if not 0.5 <= ratio <= 1.5:
+            continue
+
+        # Draw bounding box
+        cv2.rectangle(
+            image,
+            (x, y),
+            (x + w, y + h),
+            (0, 255, 0),
+            2
+        )
+
+def filter_rec_draw(contours, image, limit=1750):
+    for contour in contours:
+
+        area = cv2.contourArea(contour)
+
+        if area < limit:
+            continue
+
+        perimeter = cv2.arcLength(contour, True)
+
+        if perimeter == 0:
+            continue
+
+        # Xấp xỉ contour
+        epsilon = 0.04 * perimeter
+        approx = cv2.approxPolyDP(
+            contour, epsilon, True
+        )
+
+        # Hình chữ nhật có 4 đỉnh
+        if len(approx) != 4:
+            continue
+
+        x, y, w, h = cv2.boundingRect(approx)
+
+        if w < 15 or h < 15:
+            continue
+
+        # Kiểm tra tỷ lệ chiều rộng / chiều cao
+        ratio = w / h
+
+        if not 0.5 <= ratio <= 1.5:
+            continue
+
+        cv2.rectangle(
+            image,
+            (x, y),
+            (x + w, y + h),
+            (0, 255, 0),
+            2
+        )
+        
+def filter_tri_draw(contours, image, limit=1750):
+    for contour in contours:
+
+        area = cv2.contourArea(contour)
+
+        if area < limit:
+            continue
+
+        perimeter = cv2.arcLength(contour, True)
+
+        if perimeter == 0:
+            continue
+
+        # Xấp xỉ contour
+        epsilon = 0.04 * perimeter
+        approx = cv2.approxPolyDP(
+            contour, epsilon, True
+        )
+
+        # Tam giác có 3 đỉnh
+        if len(approx) != 3:
+            continue
+
+        x, y, w, h = cv2.boundingRect(approx)
+
+        if w < 15 or h < 15:
+            continue
+
+        cv2.rectangle(
+            image,
+            (x, y),
+            (x + w, y + h),
+            (0, 255, 0),
+            2
+        )
+        
 
 capSRC = readFromFile(vid1)
 
@@ -72,10 +274,10 @@ cv2.namedWindow("blue_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("blue_mask", int(width * 0.22), int(height * 0.22))
 cv2.namedWindow("green_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("green_mask", int(width * 0.22), int(height * 0.22))
-cv2.namedWindow("temp_screen_1", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("temp_screen_1", int(width * 0.22), int(height * 0.22))
-cv2.namedWindow("temp_screen_2", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("temp_screen_2", int(width * 0.22), int(height * 0.22))
+cv2.namedWindow("r_b_collab_mask", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("r_b_collab_mask", int(width * 0.22), int(height * 0.22))
+cv2.namedWindow("r_y_collab_mask", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("r_y_collab_mask", int(width * 0.22), int(height * 0.22))
 
 
 
@@ -106,10 +308,10 @@ lower_green = np.array([35, 80, 60])
 upper_green = np.array([85, 255, 255])
 
 # trắng
-lower_white = np.array([0, 0, 200])
+lower_white = np.array([0, 0, 200]) # is way too likely to target the sky, unused
 upper_white = np.array([180, 30, 255])
 
-# bottom blindfold (1/3)
+# bottom blindfold
 blindfold = createEvilROI(height, width)
 
 
@@ -132,46 +334,58 @@ while True:
         # lấy ảnh hsv    
         
         # mask đỏ
-        red1 = cv2.inRange(
-            blur_hsv,
-            lower_red1,
-            upper_red1
-        )
-        red2 = cv2.inRange(
-            blur_hsv,
-            lower_red2,
-            upper_red2
-        )
-        red = cv2.bitwise_or(red1, red2)
+        red1 = getColorMask(blur_hsv,lower_red1,upper_red1)
+        red2 = getColorMask(blur_hsv,lower_red2,upper_red2)
+        red = red1 | red2
 
         # mask vàng
-        yel = cv2.inRange(
-            blur_hsv,
-            lower_yellow,
-            upper_yellow
-        )
+        yel = getColorMask(blur_hsv,lower_yellow,upper_yellow)
+
         # mask xanh dương
-        blu = cv2.inRange(
-            blur_hsv,
-            lower_blue,
-            upper_blue
-        )
+        blu = getColorMask(blur_hsv,lower_blue,upper_blue)
         
         # mask xanh lá
-        gre = cv2.inRange(
-            blur_hsv,
-            lower_green,
-            upper_green
-        )
+        gre = getColorMask(blur_hsv,lower_green,upper_green)
+
+        # pure mask list: red, gre, blu, yel
         
-        wht = cv2.inRange(
-            blur_hsv,
-            lower_white,
-            upper_white
-        )
+        red,gre,blu,yel = medianFilterMulti(red, gre, blu, yel, iterations=2,s=3)
+        
+
+        # remove stray pixels
+        red = removeStrays(red, kernele3)
+        yel = removeStrays(yel, kernele3)
+        blu = removeStrays(blu, kernele3)
+        gre = removeStrays(gre, kernele3)
+        
+        # attempt re connect 
+        red = mendCracks(red, kernele5)
+        yel = mendCracks(yel, kernele5)
+        blu = mendCracks(blu, kernele7)
+        gre = mendCracks(gre, kernele5)        
+        
+        # fill inside
+        
+        red = fill_and_heal_mask(red)
+        yel = fill_and_heal_mask(yel)
+        blu = fill_and_heal_mask(blu)
+        gre = fill_and_heal_mask(gre)        
+        
+        
+        
+        # pre_merge
         
         rb_collab = cv2.bitwise_or(red, blu) # will switch to use the fancy | symbol later
         ry_collab = cv2.bitwise_or(red, yel)
+        
+        # post_merge
+        
+        # plan: draw contours
+        # blue: find rectangular niggas
+        # green: maybe find rectangular niggas as well, idk. too rare 
+        # red&blue: find circular niggas
+        # red&yellow: find triangular niggas
+        
         
         
         # apply blindfold
@@ -179,7 +393,6 @@ while True:
         blu = cv2.bitwise_and(blu,blindfold)
         yel = cv2.bitwise_and(yel,blindfold)
         gre = cv2.bitwise_and(gre,blindfold)
-        wht = cv2.bitwise_and(wht,blindfold)
         rb_collab = cv2.bitwise_and(rb_collab,blindfold)
         ry_collab = cv2.bitwise_and(ry_collab,blindfold)
     
@@ -188,9 +401,9 @@ while True:
             cv2.imshow('red_mask', red)
             cv2.imshow('yellow_mask', yel)                
             cv2.imshow('blue_mask', blu)
-            cv2.imshow('green_mask', wht)
-            cv2.imshow('temp_screen_1', rb_collab)
-            cv2.imshow('temp_screen_2', ry_collab)
+            cv2.imshow('green_mask', gre)
+            cv2.imshow('r_b_collab_mask', rb_collab)
+            cv2.imshow('r_y_collab_mask', ry_collab)
 
     # note to self:
     # have pure blue detect recangular signs
