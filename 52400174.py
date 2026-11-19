@@ -398,41 +398,41 @@ def watchVideo(filename):
             break
         
 # interface
-
-while True:
-    print("===============MENU===============")
-    print("1. Process video 1")
-    print("2. Process video 2")
-    print("3. Watch video 1")
-    print("4. Watch video 2")
-    print("0. Quit")
-    print("===============MENU===============")
-    
-    choice = input("Please pick an option: ").strip()
-    match choice:
-        case "0":
-            break
+if __name__ == "__main__":
+    while True:
+        print("===============MENU===============")
+        print("1. Process video 1")
+        print("2. Process video 2")
+        print("3. Watch video 1")
+        print("4. Watch video 2")
+        print("0. Quit")
+        print("===============MENU===============")
         
-        case "1":
-            processVideo(vid1)
-            break
-        
-        case "2":
-            processVideo(vid2)
-            break
-        
-        case "3":
-            watchVideo(vid1)
-            break
-                
-        case "4":
-            watchVideo(vid2)
-            break
-                
-        case _:
-            print("==================================")
-            print("Please input a valid choice.")
-            print("==================================")
+        choice = input("Please pick an option: ").strip()
+        match choice:
+            case "0":
+                break
+            
+            case "1":
+                processVideo(vid1)
+                break
+            
+            case "2":
+                processVideo(vid2)
+                break
+            
+            case "3":
+                watchVideo(vid1)
+                break
+                    
+            case "4":
+                watchVideo(vid2)
+                break
+                    
+            case _:
+                print("==================================")
+                print("Please input a valid choice.")
+                print("==================================")
             
 
             

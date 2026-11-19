@@ -1,8 +1,11 @@
 # Large video files
 /videos/
 
-# Image files to make sure
+# Image files 
 /images/
+
+# Training data files
+/training/
 
 # Python cache and virtual environments
 __pycache__/

@@ -17,9 +17,6 @@ kernele5 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 kernele7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 kernele9 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
 
-
-
-
 def readFromFile(filename):
     capSRC = f"videos/{filename}.mp4"
     return capSRC
@@ -47,7 +44,7 @@ def createEvilROI(height, width):
     # Tô đen (0) cho vùng bên trong hình thang
     cv2.fillPoly(trapezoidMask, [pts], 0)
     
-    mask = cv2.bitwise_and(trapezoidMask, rectangleMask)
+    mask = trapezoidMask & rectangleMask
     
     return mask
 
@@ -59,34 +56,25 @@ def getColorMask(hsv_image, lower, upper):
     )
     return mask
 
-def removeStrays(mask, kernel):
+def removeStrays(mask, kernel, i=1):
     new_mask = cv2.morphologyEx(
         mask,
         cv2.MORPH_OPEN,
-        kernel
+        kernel,
+        iterations=i
     )
     return new_mask
 
-def mendCracks(mask, kernel):
+def mendCracks(mask, kernel, i=1):
     new_mask = cv2.morphologyEx(
         mask,
         cv2.MORPH_CLOSE,
-        kernel
+        kernel,
+        iterations=i
     )
     return new_mask
 
-# loại bỏ nhiễu hạt lẻ
-def medianFilterMulti(*masks,s=3, iterations=1): 
-    processed_masks = []
-    
-    for m in masks:
-        for _ in range(iterations):
-            m = cv2.medianBlur(m, ksize=s)
-        processed_masks.append(m)
-        
-    return processed_masks
-
-def fill_and_heal_mask(binary_mask, min_area = 300, max_area = 40000, min_solidity = 0.7):
+def fillAndHealMask(binary_mask, min_area = 400, max_area = 60000, min_solidity = 0.55):
     # 1. Chỉ lấy các đường viền ngoài cùng (bỏ qua lỗ rỗng bên trong)
     contours, _ = cv2.findContours(
         binary_mask, 
@@ -99,8 +87,10 @@ def fill_and_heal_mask(binary_mask, min_area = 300, max_area = 40000, min_solidi
     
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        # Bỏ qua các đốm nhiễu quá nhỏ
+        # Bỏ qua các đốm nhiễu quá nhỏ hoặc chụm quá lớn
         if area < min_area:
+            continue
+        if area > max_area:
             continue
             
         # 2. Tạo bao lồi (kéo căng dây thun quanh contour để vá vết lõm chữ C)
@@ -118,10 +108,61 @@ def fill_and_heal_mask(binary_mask, min_area = 300, max_area = 40000, min_solidi
             
     return healed_mask        
 
+def isRectangle(approx, min_angle=75, max_angle=105):
 
-def filter_cir_draw(contours, image, min_circularity = 0.75,limit=1750): # độ tròn nên là 0.7 hoặc hơn
+    points = approx.reshape(4, 2)
+
+    for i in range(4):
+
+        p1 = points[i - 1] - points[i]
+        p2 = points[(i + 1) % 4] - points[i]
+
+        norm1 = np.linalg.norm(p1)
+        norm2 = np.linalg.norm(p2)
+
+        if norm1 == 0 or norm2 == 0:
+            return False
+
+        cosine = np.dot(p1, p2) / (norm1 * norm2)
+
+        angle = np.degrees(np.arccos(
+            np.clip(cosine, -1, 1)
+        ))
+
+        if not min_angle <= angle <= max_angle:
+            return False
+
+    return True
+
+def isTriangle(approx, min_angle=25, max_angle=130):
+
+    points = approx.reshape(3, 2)
+
+    for i in range(3):
+
+        p1 = points[i - 1] - points[i]
+        p2 = points[(i + 1) % 3] - points[i]
+
+        norm1 = np.linalg.norm(p1)
+        norm2 = np.linalg.norm(p2)
+
+        if norm1 == 0 or norm2 == 0:
+            return False
+
+        cosine = np.dot(p1, p2) / (norm1 * norm2)
+
+        angle = np.degrees(np.arccos(
+            np.clip(cosine, -1, 1)
+        ))
+
+        if not min_angle <= angle <= max_angle:
+            return False
+
+    return True
+
+def filterCir(contours, image, min_circularity = 0.80,limit=1200): # độ tròn nên là 0.80 hoặc hơn
     for contour in contours:
-        # Mặc kệ những contour nhỏ hơn 2000 pixels
+        # Mặc kệ những contour nhỏ hơn 1200 pixels
         area = cv2.contourArea(contour)
 
         if area < limit:
@@ -141,7 +182,7 @@ def filter_cir_draw(contours, image, min_circularity = 0.75,limit=1750): # độ
         # Vẽ bounding box
         x, y, w, h = cv2.boundingRect(contour)
 
-        if w < 15 or h < 15:
+        if w < 25 or h < 25:
             continue
 
         # Filter by aspect ratio
@@ -159,7 +200,7 @@ def filter_cir_draw(contours, image, min_circularity = 0.75,limit=1750): # độ
             2
         )
 
-def filter_rec_draw(contours, image, limit=1750):
+def filterRec(contours, image, min_angle=75, max_angle=105, limit=2250):
     for contour in contours:
 
         area = cv2.contourArea(contour)
@@ -172,8 +213,8 @@ def filter_rec_draw(contours, image, limit=1750):
         if perimeter == 0:
             continue
 
-        # Xấp xỉ contour
-        epsilon = 0.04 * perimeter
+        # Xấp xỉ contour note: original is 0.04
+        epsilon = 0.025 * perimeter
         approx = cv2.approxPolyDP(
             contour, epsilon, True
         )
@@ -182,15 +223,18 @@ def filter_rec_draw(contours, image, limit=1750):
         if len(approx) != 4:
             continue
 
+        if not isRectangle(approx, min_angle, max_angle):
+            continue        
+
         x, y, w, h = cv2.boundingRect(approx)
 
-        if w < 15 or h < 15:
+        if w < 25 or h < 25:
             continue
 
         # Kiểm tra tỷ lệ chiều rộng / chiều cao
         ratio = w / h
-
-        if not 0.5 <= ratio <= 1.5:
+        #      too tall        too wide
+        if not 0.1 <= ratio <= 4.5:
             continue
 
         cv2.rectangle(
@@ -201,11 +245,9 @@ def filter_rec_draw(contours, image, limit=1750):
             2
         )
         
-def filter_tri_draw(contours, image, limit=1750):
+def filterTri(contours, image, min_angle=25, max_angle=130, limit=1500):
     for contour in contours:
-
         area = cv2.contourArea(contour)
-
         if area < limit:
             continue
 
@@ -215,7 +257,7 @@ def filter_tri_draw(contours, image, limit=1750):
             continue
 
         # Xấp xỉ contour
-        epsilon = 0.04 * perimeter
+        epsilon = 0.02 * perimeter
         approx = cv2.approxPolyDP(
             contour, epsilon, True
         )
@@ -224,9 +266,12 @@ def filter_tri_draw(contours, image, limit=1750):
         if len(approx) != 3:
             continue
 
+        if not isTriangle(approx, min_angle, max_angle):
+            continue
+
         x, y, w, h = cv2.boundingRect(approx)
 
-        if w < 15 or h < 15:
+        if w < 25 or h < 25:
             continue
 
         cv2.rectangle(
@@ -238,7 +283,8 @@ def filter_tri_draw(contours, image, limit=1750):
         )
         
 
-capSRC = readFromFile(vid1)
+# prep before reading the video
+capSRC = readFromFile(vid2)
 
 cap = cv2.VideoCapture(capSRC)
 
@@ -257,11 +303,6 @@ else:
     print("Press SPACE or p to pause the video.")
     print("Press ESC or q to exit the video.")
     print("Press c to save the curent frame as a jpg.")
-
-# tạo mask che 1/3 màn hình bên dưới để giảm nhiễu
-# blindfold = np.ones((height, width), dtype=np.uint8) * 255
-# blindfold[int(height * 0.667):, :] = 0 
-# tạo mask che 1/3 màn hình bên dưới để giảm nhiễu
     
 # Tạo các cửa sổ nhỏ để có thể cùng lúc xem video và 4 masks
 cv2.namedWindow("Current Frame", cv2.WINDOW_NORMAL)
@@ -272,16 +313,10 @@ cv2.namedWindow("yellow_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("yellow_mask", int(width * 0.22), int(height * 0.22))    
 cv2.namedWindow("blue_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("blue_mask", int(width * 0.22), int(height * 0.22))
-cv2.namedWindow("green_mask", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("green_mask", int(width * 0.22), int(height * 0.22))
 cv2.namedWindow("r_b_collab_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("r_b_collab_mask", int(width * 0.22), int(height * 0.22))
 cv2.namedWindow("r_y_collab_mask", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("r_y_collab_mask", int(width * 0.22), int(height * 0.22))
-
-
-
-
 
 
 # các đoạn màu
@@ -295,21 +330,13 @@ lower_red2 = np.array([160, 60, 40]) # personally, np.array([160, 60, 40])
 upper_red2 = np.array([180, 255, 255]) #             np.array([180, 255, 255])
 
 # vàng
-lower_yellow = np.array([18, 150, 120]) # might switch to np.array([18, 150, 120])
-upper_yellow = np.array([33, 255, 255]) #                 np.array([33, 255, 255])
+lower_yellow = np.array([12, 110, 90])
+upper_yellow = np.array([28, 255, 255])
 
 # xanh dương
 lower_blue = np.array([105, 140, 70]) # personally, np.array([105, 120, 45]),
 upper_blue = np.array([125, 255, 255]) #            np.array([115, 255, 255])
 
-
-# xanh lá
-lower_green = np.array([35, 80, 60])
-upper_green = np.array([85, 255, 255])
-
-# trắng
-lower_white = np.array([0, 0, 200]) # is way too likely to target the sky, unused
-upper_white = np.array([180, 30, 255])
 
 # bottom blindfold
 blindfold = createEvilROI(height, width)
@@ -330,7 +357,7 @@ while True:
         # holy hell! GaussianBlur, the GOAT!
     
         # lấy ảnh hsv
-        blur_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        blur_hsv = cv2.cvtColor(blur, cv2.COLOR_BGR2HSV)
         # lấy ảnh hsv    
         
         # mask đỏ
@@ -345,63 +372,85 @@ while True:
         blu = getColorMask(blur_hsv,lower_blue,upper_blue)
         
         # mask xanh lá
-        gre = getColorMask(blur_hsv,lower_green,upper_green)
+        # gre = getColorMask(blur_hsv,lower_green,upper_green)
 
-        # pure mask list: red, gre, blu, yel
-        
-        red,gre,blu,yel = medianFilterMulti(red, gre, blu, yel, iterations=2,s=3)
-        
+        # pure mask list: red, gre, blu, yel        
 
-        # remove stray pixels
-        red = removeStrays(red, kernele3)
-        yel = removeStrays(yel, kernele3)
-        blu = removeStrays(blu, kernele3)
-        gre = removeStrays(gre, kernele3)
+        # apply blindfold
+        red = red & blindfold
+        yel = yel & blindfold
+        blu = blu & blindfold
+        # gre = cv2.bitwise_and(gre,blindfold)
+
+        # remove stray pixels (MORPH_OPEN)
+        red = removeStrays(red, kernele3, 2)
+        yel = removeStrays(yel, kernele3, 2)
+        blu = removeStrays(blu, kernele3, 2)
+        # gre = removeStrays(gre, kernele3, 2)
         
-        # attempt re connect 
-        red = mendCracks(red, kernele5)
-        yel = mendCracks(yel, kernele5)
-        blu = mendCracks(blu, kernele7)
-        gre = mendCracks(gre, kernele5)        
+        # attempt re connect (MORPH_CLOSE)
+        red = mendCracks(red, kernele5, 3)
+        yel = mendCracks(yel, kernele5, 3)
+        blu = mendCracks(blu, kernele5, 3)
+        # gre = mendCracks(gre, kernele7, 2)        
         
         # fill inside
         
-        red = fill_and_heal_mask(red)
-        yel = fill_and_heal_mask(yel)
-        blu = fill_and_heal_mask(blu)
-        gre = fill_and_heal_mask(gre)        
+        red = fillAndHealMask(red)
+        yel = fillAndHealMask(yel)
+        blu = fillAndHealMask(blu)
+        # gre = fillAndHealMask(gre)        
         
         
         
         # pre_merge
         
-        rb_collab = cv2.bitwise_or(red, blu) # will switch to use the fancy | symbol later
-        ry_collab = cv2.bitwise_or(red, yel)
+        rb_collab = red | blu
+        ry_collab = red | yel
         
         # post_merge
         
+
+        blu_contours, _ = cv2.findContours(
+            blu,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )    
+    
+        redblu_contours, _ = cv2.findContours(
+            rb_collab,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+        
+        redyel_contours, _ = cv2.findContours(
+            ry_collab,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+        
+        
+        # vẽ bounding boxes
+        filterRec(blu_contours, frame, min_angle=80, max_angle=110, limit=2000)
+        filterCir(redblu_contours, frame, min_circularity=0.85, limit=1750)
+        filterTri(redyel_contours, frame, min_angle=25, max_angle=130, limit=1750)
+        # vẽ bounding boxes  
+        
+                        
         # plan: draw contours
         # blue: find rectangular niggas
         # green: maybe find rectangular niggas as well, idk. too rare 
         # red&blue: find circular niggas
         # red&yellow: find triangular niggas
-        
-        
-        
-        # apply blindfold
-        red = cv2.bitwise_and(red,blindfold) # will switch to use the fancy & symbol later
-        blu = cv2.bitwise_and(blu,blindfold)
-        yel = cv2.bitwise_and(yel,blindfold)
-        gre = cv2.bitwise_and(gre,blindfold)
-        rb_collab = cv2.bitwise_and(rb_collab,blindfold)
-        ry_collab = cv2.bitwise_and(ry_collab,blindfold)
+    
+    
     
         if frame is not None:
             cv2.imshow('Current Frame', frame)
             cv2.imshow('red_mask', red)
             cv2.imshow('yellow_mask', yel)                
             cv2.imshow('blue_mask', blu)
-            cv2.imshow('green_mask', gre)
+            # cv2.imshow('green_mask', gre)
             cv2.imshow('r_b_collab_mask', rb_collab)
             cv2.imshow('r_y_collab_mask', ry_collab)
 
@@ -433,3 +482,5 @@ while True:
     elif key == ord('q') or key == 27:
         break
 
+cap.release()
+cv2.destroyAllWindows()

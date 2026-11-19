@@ -32,7 +32,7 @@ def on_mouse_click(event, x, y, flags, param):
     cv2.imshow("Image", img_display)
 
 
-img = cv2.imread("images/52400174_Output-video1-Frame-553.jpg")
+img = cv2.imread("images/52400174_Output-video1-Frame-2499.jpg")
 
 if img is None:
   print("Không thể mở ảnh. Hãy kiểm tra lại đường dẫn file.")
