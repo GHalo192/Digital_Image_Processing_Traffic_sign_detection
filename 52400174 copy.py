@@ -1,8 +1,16 @@
+# ==============================
+# Định nghĩa các thư viện
+# ==============================
+
 import os
 import cv2
 import numpy as np
 import joblib
 from collections import defaultdict
+
+# ==============================
+# định nghĩa các biến toàn cục
+# ==============================
 
 # video name
 vid1 = "video1"
@@ -13,7 +21,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VIDEO_DIR = os.path.join(BASE_DIR, "videos")
 MODEL_PATH = os.path.join(
     BASE_DIR,
-    "traffic_sign_model.pkl"
+    "52400174_TD_Model.pkl"
 )
 
 # load model
@@ -67,7 +75,60 @@ KERNELT7 = np.array([
     [1,1,1,1,1,1,1],
 ], dtype=np.uint8)
 
-def compute_iou(boxA, boxB):
+CIRCLE_CLASSES = {
+    "Cam_Dau_Xe",
+    "Cam_Dung_Xe",
+    "Cam_Nguoc_Chieu",
+    "Cam_Queo_Trai",
+    "Huong_Di_Ben_Phai",
+    "Queo_Phai_O_Day",
+    "Dung_Xe",
+}
+
+TRIANGLE_CLASSES = {
+    "Di_Cham",
+    "Tre_Em_Qua_Duong",
+    "Nhuong_Duong",
+}
+
+RECT_CLASSES = {
+    "Chi_Dan_Duong",
+    "Khu_Vuc_Dau_Xe",
+    "Khu_Vuc_Nguoi_Qua_Duong",
+}
+
+# Các đoạn màu HSV
+lower_red1 = np.array([0, 60, 40])
+upper_red1 = np.array([5, 255, 255])
+lower_red2 = np.array([160, 60, 40])
+upper_red2 = np.array([180, 255, 255])
+
+lower_yellow = np.array([12, 110, 90])
+upper_yellow = np.array([28, 255, 255])
+
+lower_blue = np.array([105, 140, 70])
+upper_blue = np.array([125, 255, 255])
+
+# ==============================
+# Định nghĩa các hàm
+# ==============================
+
+# Đọc từ file
+def readFromFile(filename):
+    return os.path.join(VIDEO_DIR, f"{filename}.mp4")
+
+def medianFilter_Iteration(*masks, iterations=1, s=3):
+    processed_masks = []
+    
+    for m in masks:
+        for _ in range(iterations):
+            m = cv2.medianBlur(m, ksize=s)
+        processed_masks.append(m)
+        
+    return processed_masks
+
+
+def computeIOU(boxA, boxB):
     # box dạng (x, y, w, h)
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
@@ -108,7 +169,7 @@ class SignTracker:
             for t_idx, track in enumerate(self.tracks):
                 if t_idx in matched_track_indices:
                     continue
-                iou = compute_iou(det_box, track["box"])
+                iou = computeIOU(det_box, track["box"])
                 if iou > best_iou:
                     best_iou = iou
                     best_t_idx = t_idx
@@ -179,10 +240,6 @@ class SignTracker:
                     "is_holding": track["missed_frames"] > 0,  # True nếu đang ở trạng thái "đọng lại"
                 })
         return results
-
-# Đọc từ file
-def readFromFile(filename):
-    return os.path.join(VIDEO_DIR, f"{filename}.mp4")
 
 # Tạo blindfold che màn hình
 def createEvilROI(height, width):    
@@ -476,10 +533,7 @@ def preprocessImage(image, size=IMAGE_SIZE):
 
     return gray
 
-# ==========================================
-# PREDICT TRAFFIC SIGN
-# ==========================================
-
+# Phát hiện loại biển báo
 def predictSign(image):
     if image is None or image.size == 0:
         return None, 0.0, 0.0
@@ -586,43 +640,7 @@ def predictOnFrame(
 
     return detections
 
-# ==========================================
-# PREP BEFORE READING THE VIDEO
-# ==========================================
-CIRCLE_CLASSES = {
-    "Cam_Dau_Xe",
-    "Cam_Dung_Xe",
-    "Cam_Nguoc_Chieu",
-    "Cam_Queo_Trai",
-    "Huong_Di_Ben_Phai",
-    "Queo_Phai_O_Day",
-    "Dung_Xe",
-}
-
-TRIANGLE_CLASSES = {
-    "Di_Cham",
-    "Tre_Em_Qua_Duong",
-    "Nhuong_Duong",
-}
-
-RECT_CLASSES = {
-    "Chi_Dan_Duong",
-    "Khu_Vuc_Dau_Xe",
-    "Khu_Vuc_Nguoi_Qua_Duong",
-}
-
-# Các đoạn màu HSV
-lower_red1 = np.array([0, 60, 40])
-upper_red1 = np.array([5, 255, 255])
-lower_red2 = np.array([160, 60, 40])
-upper_red2 = np.array([180, 255, 255])
-
-lower_yellow = np.array([12, 110, 90])
-upper_yellow = np.array([28, 255, 255])
-
-lower_blue = np.array([105, 140, 70])
-upper_blue = np.array([125, 255, 255])
-
+# Xem video
 def watchVideo(vid):
     capSRC = readFromFile(vid)
     cap = cv2.VideoCapture(capSRC)
@@ -651,12 +669,12 @@ def watchVideo(vid):
     
     cv2.namedWindow("Current Frame", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Current Frame", int(width * 0.4), int(height * 0.4))
-    # cv2.namedWindow("B_Mask", cv2.WINDOW_NORMAL)
-    # cv2.resizeWindow("B_Mask", int(width * 0.3), int(height * 0.3))
-    # cv2.namedWindow("RB_Mask", cv2.WINDOW_NORMAL)
-    # cv2.resizeWindow("RB_Mask", int(width * 0.3), int(height * 0.3))
-    # cv2.namedWindow("RY_Mask", cv2.WINDOW_NORMAL)
-    # cv2.resizeWindow("RY_Mask", int(width * 0.3), int(height * 0.3))    
+    cv2.namedWindow("B_Mask", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("B_Mask", int(width * 0.3), int(height * 0.3))
+    cv2.namedWindow("RB_Mask", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("RB_Mask", int(width * 0.3), int(height * 0.3))
+    cv2.namedWindow("RY_Mask", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("RY_Mask", int(width * 0.3), int(height * 0.3))    
     
     paused = False
     while True:
@@ -678,21 +696,53 @@ def watchVideo(vid):
             yel = cv2.inRange(blur_hsv,lower_yellow,upper_yellow) & blindfold
             blu = cv2.inRange(blur_hsv,lower_blue,upper_blue) & blindfold
             
-            red = cv2.morphologyEx(red,cv2.MORPH_OPEN,KERNELE3,iterations=2)
-            yel = cv2.morphologyEx(yel,cv2.MORPH_OPEN,KERNELE3,iterations=2)
-            blu = cv2.morphologyEx(blu,cv2.MORPH_OPEN,KERNELE3,iterations=2)
+            #
+            # adjusting masks
+            # remove stray pixels
+            # red = cv2.medianBlur(red,ksize=3) 
+            # blu = cv2.medianBlur(blu,ksize=3)
+            # yel = cv2.medianBlur(yel,ksize=3)
+            red, blu, yel = medianFilter_Iteration(red, blu, yel, iterations=4,s=3)
+            # remove stray pixels
 
-            red = cv2.morphologyEx(red,cv2.MORPH_CLOSE,KERNELE3,iterations=3)
-            yel = cv2.morphologyEx(yel,cv2.MORPH_CLOSE,KERNELE3,iterations=3)
-            blu = cv2.morphologyEx(blu,cv2.MORPH_CLOSE,KERNELE3,iterations=3)
+            red = cv2.morphologyEx(
+                red,
+                cv2.MORPH_CLOSE,
+                KERNELS5
+            )
+
+            blu = cv2.morphologyEx(
+                blu,
+                cv2.MORPH_CLOSE,
+                KERNELS5
+            )
+
+            yel = cv2.morphologyEx(
+                yel,
+                cv2.MORPH_CLOSE,
+                KERNELS5
+            )
             
+        
+            # đưa blindfold lên che hết 1/3 dưới của màn hình
+            red = red & blindfold
+            blu = blu & blindfold
+            yel = yel & blindfold
+            # đưa blindfold lên che hết 1/3 dưới của màn hình        
+        
             red = fillAndHealMask(red)
             yel = fillAndHealMask(yel)
             blu = fillAndHealMask(blu)
-
+                    
             rb_collab = red | blu
             ry_collab = red | yel
             
+            # dilate masks
+            blu = cv2.dilate(blu,KERNELS5,iterations=1)
+            rb_collab = cv2.dilate(rb_collab,KERNELE5,iterations=1)
+            ry_collab = cv2.dilate(ry_collab,KERNELT7,iterations=5)
+            # dilate masks
+                        
             blu_contours, _ = cv2.findContours(blu, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             redblu_contours, _ = cv2.findContours(rb_collab, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             redyel_contours, _ = cv2.findContours(ry_collab, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -735,9 +785,9 @@ def watchVideo(vid):
             cv2.putText(frame, "52400174", (width - 250, height - 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2, cv2.LINE_AA)
 
             cv2.imshow("Current Frame", frame)
-            # cv2.imshow("B_Mask", blu)
-            # cv2.imshow("RB_Mask", rb_collab)
-            # cv2.imshow("RY_Mask", ry_collab)
+            cv2.imshow("B_Mask", blu)
+            cv2.imshow("RB_Mask", rb_collab)
+            cv2.imshow("RY_Mask", ry_collab)
 
 
 
@@ -760,7 +810,8 @@ def watchVideo(vid):
             break
     cap.release()
     cv2.destroyAllWindows()
-    
+
+# Xử lý và xuất video
 def processVideo(vid):
     capSRC = readFromFile(vid)
     cap = cv2.VideoCapture(capSRC)
@@ -790,13 +841,13 @@ def processVideo(vid):
     tracker = SignTracker(fps=fps, hold_seconds=0.5, iou_threshold=0.15, min_hits=2)    
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    output_video_path = os.path.join(BASE_DIR, f"52400174_{vid}_output.mp4")
+    output_video_path = os.path.join(VIDEO_DIR, f"52400174_{vid}_output.mp4")
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))        
     while True:
         ret, frame = cap.read()
         # KIỂM TRA ret TRƯỚC KHI .copy() ĐỂ TRÁNH CRASH CUỐI VIDEO
         if not ret:
-            print("End of video.")
+            print("Video Processed.")
             break
 
         clean_frame = frame.copy()

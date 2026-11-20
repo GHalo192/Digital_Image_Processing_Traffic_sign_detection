@@ -3,18 +3,17 @@ import os
 import cv2
 import numpy as np
 import joblib
-
 from sklearn.svm import SVC
 
 
 # ==========================================
-# 1. CONFIGURATION
+# CONFIGURATION
 # ==========================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATASET_PATH = os.path.join(BASE_DIR, "training")
-MODEL_PATH = os.path.join(BASE_DIR, "traffic_sign_model.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "52400174_TD_Model.pkl")
 
 IMAGE_SIZE = 64
 
@@ -29,7 +28,7 @@ HOG_PARAMS = {
 
 
 # ==========================================
-# 2. IMAGE PREPROCESSING
+# IMAGE PREPROCESSING
 # ==========================================
 
 def preprocessImage(image, size=IMAGE_SIZE):
@@ -71,7 +70,7 @@ def preprocessImage(image, size=IMAGE_SIZE):
 
 
 # ==========================================
-# 3. INITIALIZE HOG
+# INITIALIZE HOG
 # ==========================================
 
 hog = cv2.HOGDescriptor(
@@ -84,7 +83,7 @@ hog = cv2.HOGDescriptor(
 
 
 # ==========================================
-# 4. LOAD DATASET AND EXTRACT HOG FEATURES
+# LOAD DATASET AND EXTRACT HOG FEATURES
 # ==========================================
 
 def loadDataset():
@@ -162,7 +161,7 @@ def loadDataset():
 
 
 # ==========================================
-# 5. TRAIN SVM MODEL
+# TRAIN SVM MODEL
 # ==========================================
 
 def trainModel(X, y):
@@ -179,7 +178,7 @@ def trainModel(X, y):
 
     print("Training completed!")
 
-    # Training accuracy (not independent test accuracy)
+    # Training accuracy
     predictions = model.predict(X)
 
     accuracy = np.mean(predictions == y) * 100
@@ -190,7 +189,7 @@ def trainModel(X, y):
 
 
 # ==========================================
-# 6. SAVE MODEL
+# SAVE MODEL
 # ==========================================
 
 def saveModel(model, class_counts):
@@ -211,7 +210,7 @@ def saveModel(model, class_counts):
 
 
 # ==========================================
-# 7. MAIN
+# MAIN
 # ==========================================
 
 def main():
